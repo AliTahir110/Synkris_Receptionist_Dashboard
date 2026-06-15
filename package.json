@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "backend": "cd backend && python3 app.py",
+    "backend:test": "python3 backend/test_pms.py && python3 backend/test_webhook.py"
   }
 }

@@ -111,6 +111,12 @@
     .appt-time { min-width: 48px; text-align: center; border-radius: 7px; border: 1px solid var(--border); background: #fff; padding: 5px 7px; }
     .appt-time strong { display: block; color: var(--blue); font-size: 12px; }
     .appt-time span { color: var(--muted); font-size: 9px; font-weight: 800; }
+    .appt-main { min-width: 0; flex: 1; }
+    .appt-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .appt-chip { display: inline-flex; align-items: center; border: 1px solid var(--border); background: #fff; color: var(--muted); border-radius: 999px; padding: 2px 7px; font-size: 10px; font-weight: 800; }
+    .appt-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .appt-transcript { margin: -2px 0 8px 58px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; padding: 10px 12px; color: #475569; line-height: 1.5; font-size: 12px; }
+    .appt-transcript a { color: #0369a1; font-weight: 800; }
     .status { margin-left: auto; font-size: 10px; font-weight: 900; padding: 3px 7px; border-radius: 999px; white-space: nowrap; background: rgba(20,184,166,.11); color: #0f766e; }
     .status.pending { background: rgba(245,158,11,.13); color: #b45309; }
     .status.booked { background: rgba(14,165,233,.11); color: #0369a1; }
@@ -136,6 +142,12 @@
     .field label { color: var(--muted); font-size: 11px; font-weight: 850; text-transform: uppercase; letter-spacing: .4px; }
     .field input, .field select, .field textarea { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 11px; font: inherit; color: var(--text); background: #fff; }
     .field textarea { min-height: 96px; resize: vertical; grid-column: 1 / -1; }
+    .backend-result { grid-column: 1 / -1; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 11px; background: #f8fafc; color: var(--muted); font-size: 12px; line-height: 1.5; min-height: 42px; }
+    .backend-result.ok { border-color: rgba(20,184,166,.32); background: #effffd; color: #0f766e; }
+    .backend-result.error { border-color: rgba(239,68,68,.26); background: #fff5f5; color: #b91c1c; }
+    .transcript-row td { background: #f8fafc; padding-top: 0; }
+    .transcript-panel { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 11px 12px; color: #475569; line-height: 1.55; white-space: normal; }
+    .transcript-panel strong { color: var(--text); }
     .room-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .room { border: 1px solid var(--border); border-radius: var(--radius); background: #fff; padding: 14px; }
     .room-name { font-weight: 900; }
@@ -206,6 +218,9 @@
 
   <script>
     const API_URL = "/api/dental-dashboard";
+    const BACKEND_HEALTH_URL = "/api/backend/health";
+    const BACKEND_CONFIG_URL = "/api/backend/config";
+    const BACKEND_WEBHOOK_URL = "/api/backend/webhook";
     const colors = ["#14b8a6", "#0ea5e9", "#2563eb", "#f59e0b", "#ef4444"];
     const iconMap = { users: "PT", calendar: "AP", activity: "CH", sparkles: "AI" };
 
@@ -217,7 +232,7 @@
         { label: "Chair Utilization", value: "86%", delta: "4 rooms active", trend: "neutral", icon: "activity" },
         { label: "AI Resolution", value: "93%", delta: "+2.4% this week", trend: "up", icon: "sparkles" }
       ],
-      activeCall: { patient: "Ayesha Khan", phone: "+1 (415) 882-3047", reason: "Tooth pain consultation", timer: "02:47", transcript: "I can book an urgent dental exam for 11:30 AM today or 9:00 AM tomorrow. Which works better for you?", bookingRate: "78%", intentMatch: "96%", fallbackRate: "5%" },
+      activeCall: { patient: "Dr James Smith", phone: "+1 (415) 882-3047", reason: "Tooth pain consultation", timer: "02:47", transcript: "I can book an urgent dental exam for 11:30 AM today or 9:00 AM tomorrow. Which works better for you?", bookingRate: "78%", intentMatch: "96%", fallbackRate: "5%" },
       queue: [{ name: "Michael Lee", wait: "0:42", reason: "Cleaning reschedule" }, { name: "New Patient", wait: "1:16", reason: "Implant inquiry" }, { name: "Sara Mitchell", wait: "2:03", reason: "Insurance question" }],
       appointments: [{ time: "9:00", meridiem: "AM", name: "Daniel Reeves", service: "Routine Cleaning", room: "Room 2", status: "Confirmed" }],
       treatments: [{ label: "Cleanings", value: 12, color: "#14b8a6" }, { label: "Emergency", value: 7, color: "#ef4444" }, { label: "Cosmetic", value: 6, color: "#0ea5e9" }, { label: "Restorative", value: 9, color: "#f59e0b" }],
@@ -240,6 +255,37 @@
         console.warn("Using fallback dashboard data:", error);
         return fallbackData;
       }
+    }
+
+    async function getBackendHealth() {
+      try {
+        const response = await fetch(BACKEND_HEALTH_URL, { headers: { "Accept": "application/json" } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        return { status: "error", message: error.message };
+      }
+    }
+
+    async function getBackendConfig() {
+      try {
+        const response = await fetch(BACKEND_CONFIG_URL, { headers: { "Accept": "application/json" } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        return { status: "error", message: error.message, treatment_types: [], practitioners: [] };
+      }
+    }
+
+    async function callBackend(functionName, args) {
+      const response = await fetch(`${BACKEND_WEBHOOK_URL}/${functionName}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ args })
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || `HTTP ${response.status}`);
+      return body;
     }
 
     function renderStats(stats) {
@@ -300,14 +346,15 @@
     function renderTreatments(treatments) {
       const total = treatments.reduce((sum, item) => sum + item.value, 0) || 1;
       let start = 0;
-      const segments = treatments.map(item => {
+      const hasValues = treatments.some(item => item.value > 0);
+      const segments = hasValues ? treatments.map(item => {
         const end = start + (item.value / total) * 100;
         const part = `${item.color} ${start}% ${end}%`;
         start = end;
         return part;
-      }).join(", ");
+      }).join(", ") : "#e2e8f0 0% 100%";
       return `<article class="card">
-        <div class="card-head"><div><div class="card-title">Treatment Mix</div><div class="card-sub">Today's visits by type</div></div></div>
+        <div class="card-head"><div><div class="card-title">Treatment Mix</div><div class="card-sub">Backend calls by treatment</div></div></div>
         <div class="card-body">
           <div class="donut-wrap">
             <div class="donut" style="background:conic-gradient(${segments})"></div>
@@ -326,16 +373,31 @@
         </div>`).join("")}</div>`;
     }
 
-    function renderAppointments(appointments) {
+    function renderAppointments(appointments, options = {}) {
+      const showCallTools = Boolean(options.showCallTools);
+      const title = options.title || "Today's Appointments";
+      const subtitle = options.subtitle || `${appointments.length} backend appointment records`;
       return `<article class="card">
-        <div class="card-head"><div><div class="card-title">Today's Appointments</div><div class="card-sub">${appointments.length} scheduled dental visits</div></div><button class="btn">View All</button></div>
+        <div class="card-head"><div><div class="card-title">${escapeHtml(title)}</div><div class="card-sub">${escapeHtml(subtitle)}</div></div><button class="btn">View All</button></div>
         <div class="card-body">${appointments.map(item => {
-          const statusClass = item.status === "Pending" ? "pending" : item.status === "Just Booked" ? "booked" : "";
+          const statusClass = item.status === "Pending" ? "pending" : ["Just Booked", "Backend Booked", "Call Booked"].includes(item.status) ? "booked" : "";
+          const transcriptId = item.callId ? `schedule-${item.callId}` : "";
           return `<div class="appt">
             <div class="appt-time"><strong>${escapeHtml(item.time)}</strong><span>${escapeHtml(item.meridiem)}</span></div>
-            <div><div class="appt-name">${escapeHtml(item.name)}</div><div class="appt-detail">${escapeHtml(item.service)} | ${escapeHtml(item.room)}</div></div>
-            <div class="status ${statusClass}">${escapeHtml(item.status)}</div>
-          </div>`;
+            <div class="appt-main">
+              <div class="appt-name">${escapeHtml(item.name)}</div>
+              <div class="appt-detail">${escapeHtml(item.service)} | ${escapeHtml(item.room)}</div>
+              ${showCallTools ? `<div class="appt-meta">
+                <span class="appt-chip">${escapeHtml(item.date || "Date from call")}</span>
+                <span class="appt-chip">${escapeHtml(item.source || "Backend")}</span>
+                <span class="appt-chip">${escapeHtml(item.confidence || "Backend confirmed")}</span>
+              </div>` : ""}
+            </div>
+            <div class="appt-actions">
+              ${showCallTools && item.transcript ? `<button class="btn" type="button" data-transcript="${escapeHtml(transcriptId)}">View Transcript</button>` : ""}
+              <div class="status ${statusClass}">${escapeHtml(item.status)}</div>
+            </div>
+          </div>${showCallTools && item.transcript ? `<div class="appt-transcript" data-transcript-row="${escapeHtml(transcriptId)}" hidden><strong>Transcript:</strong> ${escapeHtml(item.transcript)}${item.recordingUrl ? `<div style="margin-top:10px"><a href="${escapeHtml(item.recordingUrl)}" target="_blank" rel="noreferrer">Open recording</a></div>` : ""}</div>` : ""}`;
         }).join("")}</div>
       </article>`;
     }
@@ -368,6 +430,53 @@
       </article>`;
     }
 
+    function renderPatientRecords(rows = []) {
+      return `<article class="card">
+        <div class="card-head"><div><div class="card-title">Backend Patient Records</div><div class="card-sub">${rows.length} profiles from Supabase calls and PMS data</div></div></div>
+        <div class="card-body" style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Patient</th><th>Phone</th><th>Reason</th><th>Outcome</th><th>Last Contact</th><th>Source</th><th>Transcript</th></tr></thead>
+            <tbody>${rows.length ? rows.map(row => {
+              const transcriptId = row.callId ? `patient-${row.callId}` : "";
+              return `<tr>
+                <td class="patient">${escapeHtml(row.patient)}</td>
+                <td class="muted">${escapeHtml(row.phone)}</td>
+                <td>${escapeHtml(row.reason)}</td>
+                <td><span class="outcome">${escapeHtml(row.outcome)}</span></td>
+                <td class="muted">${escapeHtml(row.lastContact || "Backend record")}</td>
+                <td class="muted">${escapeHtml(row.owner || row.source || "Backend")}</td>
+                <td>${row.transcript ? `<button class="btn" type="button" data-transcript="${escapeHtml(transcriptId)}">View Transcript</button>` : `<span class="muted">No transcript</span>`}</td>
+              </tr>${row.transcript ? `<tr class="transcript-row" data-transcript-row="${escapeHtml(transcriptId)}" hidden>
+                <td colspan="7"><div class="transcript-panel"><strong>Transcript:</strong> ${escapeHtml(row.transcript)}${row.recordingUrl ? `<div style="margin-top:10px"><a href="${escapeHtml(row.recordingUrl)}" target="_blank" rel="noreferrer">Open recording</a></div>` : ""}</div></td>
+              </tr>` : ""}`;
+            }).join("") : `<tr><td colspan="7" class="muted">No backend patient records yet. New Retell calls will appear here after Supabase sync.</td></tr>`}</tbody>
+          </table>
+        </div>
+      </article>`;
+    }
+
+    function renderCallHistory(calls = []) {
+      return `<article class="card">
+        <div class="card-head"><div><div class="card-title">Backend Call History</div><div class="card-sub">${calls.length} webhook calls recorded in this backend session</div></div></div>
+        <div class="card-body" style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Time</th><th>Function</th><th>From</th><th>To</th><th>Status</th><th>Transcript</th></tr></thead>
+            <tbody>${calls.length ? calls.map(call => `<tr>
+              <td class="muted">${escapeHtml(call.time)}</td>
+              <td class="patient">${escapeHtml(call.function)}</td>
+              <td>${escapeHtml(call.from)}</td>
+              <td class="muted">${escapeHtml(call.to)}</td>
+              <td><span class="outcome">${escapeHtml(call.status)}</span></td>
+              <td><button class="btn" type="button" data-transcript="${escapeHtml(call.id)}">View Transcript</button></td>
+            </tr>
+            <tr class="transcript-row" data-transcript-row="${escapeHtml(call.id)}" hidden>
+              <td colspan="6"><div class="transcript-panel"><strong>Transcript:</strong> ${escapeHtml(call.transcript || call.message || "No transcript captured for this call.")}${call.recordingUrl ? `<div style="margin-top:10px"><a href="${escapeHtml(call.recordingUrl)}" target="_blank" rel="noreferrer">Open recording</a></div>` : ""}</div></td>
+            </tr>`).join("") : `<tr><td colspan="6" class="muted">No backend webhook calls yet. Use New Booking or connect Retell to POST /webhook.</td></tr>`}</tbody>
+          </table>
+        </div>
+      </article>`;
+    }
+
     function renderViewHeader(title, subtitle, action = "") {
       return `<section class="view-head">
         <div><div class="view-title">${escapeHtml(title)}</div><div class="view-sub">${escapeHtml(subtitle)}</div></div>
@@ -390,13 +499,20 @@
     }
 
     function renderSchedule(data) {
+      const summary = data.scheduleSummary || {};
+      const first = summary.first || {};
+      const last = summary.last || {};
       return `
-        ${renderViewHeader("Schedule", "All dental appointments for today", `<button class="btn primary" data-action="booking">New Appointment</button>`)}
-        ${renderAppointments(data.appointments)}
+        ${renderViewHeader("Schedule", `${summary.count || 0} backend-derived appointments | ${escapeHtml(summary.source || "Backend")}`, `<button class="btn primary" data-action="booking">New Appointment</button>`)}
+        ${renderAppointments(data.appointments, {
+          showCallTools: true,
+          title: "Backend Schedule",
+          subtitle: "Appointments inferred from confirmed call transcripts"
+        })}
         <section class="grid-three">
-          <article class="stat-card"><div class="stat-icon" style="background:var(--teal)">9A</div><div><div class="stat-label">First Appointment</div><div class="stat-value">9:00</div><div class="stat-delta neutral">Room 2 cleaning</div></div></article>
-          <article class="stat-card"><div class="stat-icon" style="background:var(--amber)">12</div><div><div class="stat-label">Lunch Gap</div><div class="stat-value">45m</div><div class="stat-delta neutral">Best time for callbacks</div></div></article>
-          <article class="stat-card"><div class="stat-icon" style="background:var(--blue)">4P</div><div><div class="stat-label">Last Appointment</div><div class="stat-value">4:00</div><div class="stat-delta up">Whitening confirmed</div></div></article>
+          <article class="stat-card"><div class="stat-icon" style="background:var(--teal)">1st</div><div><div class="stat-label">First Appointment</div><div class="stat-value">${escapeHtml(first.time || "--")}</div><div class="stat-delta neutral">${escapeHtml(first.service || "No booking")} ${escapeHtml(first.meridiem || "")}</div></div></article>
+          <article class="stat-card"><div class="stat-icon" style="background:var(--amber)">SL</div><div><div class="stat-label">Open Backend Slots</div><div class="stat-value">${escapeHtml(summary.openSlots ?? 0)}</div><div class="stat-delta neutral">Available from webhook</div></div></article>
+          <article class="stat-card"><div class="stat-icon" style="background:var(--blue)">Last</div><div><div class="stat-label">Last Appointment</div><div class="stat-value">${escapeHtml(last.time || "--")}</div><div class="stat-delta up">${escapeHtml(last.service || "No booking")} ${escapeHtml(last.meridiem || "")}</div></div></article>
         </section>
       `;
     }
@@ -405,25 +521,34 @@
       return `
         ${renderViewHeader("Patient Calls", "Live AI receptionist queue and active call handling")}
         <section class="grid-wide">${renderActiveCall(data.activeCall)}${renderQueue(data.queue)}</section>
+        ${renderCallHistory(data.calls)}
         ${renderTable(data.recentIntake)}
       `;
     }
 
     function renderBooking(data) {
+      const treatments = (backendConfig.treatment_types || []).length ? backendConfig.treatment_types : [
+        { key: "exam", name: "Examination" },
+        { key: "scale_polish", name: "Scale & Polish" },
+        { key: "emergency", name: "Emergency Appointment" }
+      ];
+      const practitioners = backendConfig.practitioners || [];
       return `
-        ${renderViewHeader("New Booking", "Create a dental appointment from a call, web form, or front desk request")}
+        ${renderViewHeader("New Booking", "Create a dental appointment through the SynVoiceAgent backend")}
         <article class="card">
-          <div class="card-head"><div><div class="card-title">Appointment Details</div><div class="card-sub">Demo form connected to the dashboard shell</div></div></div>
+          <div class="card-head"><div><div class="card-title">Appointment Details</div><div class="card-sub">Checks availability, then books the first matching backend slot</div></div></div>
           <div class="card-body">
             <form class="form-grid" id="bookingForm">
-              <div class="field"><label>Patient Name</label><input name="name" placeholder="Enter patient name" required></div>
-              <div class="field"><label>Phone</label><input name="phone" placeholder="+1 (555) 000-0000" required></div>
-              <div class="field"><label>Treatment</label><select name="treatment"><option>Routine Cleaning</option><option>Emergency Exam</option><option>Crown Consultation</option><option>Whitening Session</option><option>Root Canal Follow-up</option></select></div>
-              <div class="field"><label>Preferred Room</label><select name="room"><option>Room 1</option><option>Room 2</option><option>Room 3</option><option>Room 4</option></select></div>
-              <div class="field"><label>Date</label><input type="date" name="date"></div>
-              <div class="field"><label>Time</label><input type="time" name="time"></div>
-              <div class="field" style="grid-column:1 / -1"><label>Notes</label><textarea name="notes" placeholder="Symptoms, insurance notes, urgency, or patient preferences"></textarea></div>
-              <div style="grid-column:1 / -1;display:flex;gap:8px;justify-content:flex-end"><button class="btn" type="reset">Clear</button><button class="btn primary" type="submit">Save Appointment</button></div>
+              <div class="field"><label>First Name</label><input name="first_name" value="John" required></div>
+              <div class="field"><label>Last Name</label><input name="last_name" value="Doe" required></div>
+              <div class="field"><label>Date of Birth</label><input type="date" name="dob" value="1985-03-22" required></div>
+              <div class="field"><label>Phone</label><input name="phone" value="+447700900123" required></div>
+              <div class="field"><label>Treatment</label><select name="treatment_key">${treatments.map(item => `<option value="${escapeHtml(item.key)}">${escapeHtml(item.name)}</option>`).join("")}</select></div>
+              <div class="field"><label>Practitioner</label><select name="practitioner_id"><option value="">Any available</option>${practitioners.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}</select></div>
+              <div class="field"><label>From Date</label><input type="date" name="date_from" value="2026-06-15" required></div>
+              <div class="field"><label>To Date</label><input type="date" name="date_to" value="2026-06-21" required></div>
+              <div class="backend-result" id="bookingResult">Backend status: ${escapeHtml(backendHealth.status || "unknown")}</div>
+              <div style="grid-column:1 / -1;display:flex;gap:8px;justify-content:flex-end"><button class="btn" type="reset">Clear</button><button class="btn" type="button" id="checkSlotsBtn">Check Slots</button><button class="btn primary" type="submit">Book First Slot</button></div>
             </form>
           </div>
         </article>
@@ -431,11 +556,12 @@
     }
 
     function renderPatients(data) {
+      const rows = data.recentIntake || [];
       return `
-        ${renderViewHeader("Patient Records", "Recent patient profiles from calls and appointments")}
-        ${renderTable(data.recentIntake)}
+        ${renderViewHeader("Patient Records", `${rows.length} backend patient profiles from calls and appointments`)}
+        ${renderPatientRecords(rows)}
         <section class="grid-three">
-          ${data.recentIntake.map(row => `<article class="card"><div class="card-body"><div class="caller"><div class="avatar">${escapeHtml(row.patient.slice(0, 1))}</div><div><div class="caller-name">${escapeHtml(row.patient)}</div><div class="caller-phone">${escapeHtml(row.phone)}</div><div class="tag">${escapeHtml(row.reason)}</div></div></div><div class="top-sub">Owner: ${escapeHtml(row.owner)} | Outcome: ${escapeHtml(row.outcome)}</div></div></article>`).join("")}
+          ${rows.slice(0, 6).map(row => `<article class="card"><div class="card-body"><div class="caller"><div class="avatar">${escapeHtml(row.patient.slice(0, 1))}</div><div><div class="caller-name">${escapeHtml(row.patient)}</div><div class="caller-phone">${escapeHtml(row.phone)}</div><div class="tag">${escapeHtml(row.reason)}</div></div></div><div class="top-sub">Source: ${escapeHtml(row.owner || "Backend")} | Outcome: ${escapeHtml(row.outcome)}</div></div></article>`).join("")}
         </section>
       `;
     }
@@ -488,8 +614,21 @@
     }
 
     function renderSettings(data) {
+      const practice = backendConfig.practice || {};
+      const backendOk = backendHealth.status === "ok";
       return `
         ${renderViewHeader("AI Settings", "Receptionist behavior, routing, and escalation settings")}
+        <article class="card">
+          <div class="card-head"><div><div class="card-title">Voice Backend</div><div class="card-sub">${backendOk ? "Connected to FastAPI webhook" : "Backend not reachable"}</div></div><span class="pill"><span class="dot" style="background:${backendOk ? "var(--green)" : "var(--red)"}"></span>${escapeHtml(backendHealth.service || backendHealth.message || "Unknown")}</span></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="field"><label>Practice</label><input value="${escapeHtml(practice.name || "Unavailable")}" readonly></div>
+              <div class="field"><label>Dialed Number</label><input value="${escapeHtml(practice.phone || "")}" readonly></div>
+              <div class="field"><label>Timezone</label><input value="${escapeHtml(practice.timezone || "")}" readonly></div>
+              <div class="field"><label>Treatments</label><input value="${escapeHtml((backendConfig.treatment_types || []).map(item => item.key).join(", "))}" readonly></div>
+            </div>
+          </div>
+        </article>
         <article class="card">
           <div class="card-head"><div><div class="card-title">${escapeHtml(data.clinic.aiAgent || "Synkris Dental AI")}</div><div class="card-sub">Live clinic automation profile</div></div></div>
           <div class="card-body">
@@ -524,11 +663,79 @@
       document.querySelectorAll("[data-action='booking']").forEach(button => {
         button.addEventListener("click", () => setView("booking"));
       });
+      document.querySelectorAll("[data-transcript]").forEach(button => {
+        button.addEventListener("click", () => {
+          const row = document.querySelector(`[data-transcript-row="${CSS.escape(button.dataset.transcript)}"]`);
+          if (!row) return;
+          row.hidden = !row.hidden;
+          button.textContent = row.hidden ? "View Transcript" : "Hide Transcript";
+        });
+      });
       const bookingForm = document.getElementById("bookingForm");
       if (bookingForm) {
-        bookingForm.addEventListener("submit", event => {
+        const resultBox = document.getElementById("bookingResult");
+        const formPayload = () => {
+          const form = new FormData(bookingForm);
+          return {
+            first_name: form.get("first_name"),
+            last_name: form.get("last_name"),
+            dob: form.get("dob"),
+            phone: form.get("phone"),
+            treatment_key: form.get("treatment_key"),
+            practitioner_id: form.get("practitioner_id") || null,
+            date_from: form.get("date_from"),
+            date_to: form.get("date_to")
+          };
+        };
+        const setBookingResult = (message, type = "") => {
+          resultBox.className = `backend-result ${type}`;
+          resultBox.textContent = message;
+        };
+        const checkSlots = async () => {
+          const payload = formPayload();
+          setBookingResult("Checking backend availability...");
+          const availability = await callBackend("check_availability", {
+            treatment_key: payload.treatment_key,
+            practitioner_id: payload.practitioner_id,
+            date_from: payload.date_from,
+            date_to: payload.date_to
+          });
+          if (availability.status !== "ok" || !availability.slots.length) {
+            setBookingResult("No backend slots found for that request.", "error");
+            return null;
+          }
+          const slot = availability.slots[0];
+          setBookingResult(`First slot: ${slot.start} with ${slot.practitioner_name}`, "ok");
+          return slot;
+        };
+        document.getElementById("checkSlotsBtn").addEventListener("click", async () => {
+          try {
+            await checkSlots();
+          } catch (error) {
+            setBookingResult(error.message, "error");
+          }
+        });
+        bookingForm.addEventListener("submit", async event => {
           event.preventDefault();
-          alert("Appointment saved in demo mode. Connect POST /api/appointments to persist this booking.");
+          try {
+            const payload = formPayload();
+            const slot = await checkSlots();
+            if (!slot) return;
+            const booking = await callBackend("book_appointment", {
+              patient: {
+                first_name: payload.first_name,
+                last_name: payload.last_name,
+                dob: payload.dob,
+                phone: payload.phone
+              },
+              treatment_key: payload.treatment_key,
+              practitioner_id: slot.practitioner_id,
+              start: slot.start
+            });
+            setBookingResult(`${booking.message} Appointment ID: ${booking.appointment_id}`, "ok");
+          } catch (error) {
+            setBookingResult(error.message, "error");
+          }
         });
       }
     }
@@ -543,13 +750,17 @@
 
     let currentData = null;
     let currentView = "overview";
+    let backendHealth = { status: "unknown" };
+    let backendConfig = { treatment_types: [], practitioners: [] };
 
     async function render() {
-      const data = await getDashboard();
+      const [data, health, config] = await Promise.all([getDashboard(), getBackendHealth(), getBackendConfig()]);
       currentData = data;
+      backendHealth = health;
+      backendConfig = config.status === "ok" ? config : { treatment_types: [], practitioners: [] };
       document.getElementById("clinicTitle").textContent = data.clinic.name || "Dentist Clinic Dashboard";
-      document.getElementById("clinicSubtitle").textContent = `${data.clinic.location || "Dental clinic"} | ${data.clinic.aiAgent || "Synkris AI"}`;
-      document.getElementById("statusText").textContent = data.clinic.status || "LIVE";
+      document.getElementById("clinicSubtitle").textContent = `${data.clinic.location || "Dental clinic"} | Backend ${backendHealth.status === "ok" ? "connected" : "offline"}`;
+      document.getElementById("statusText").textContent = backendHealth.status === "ok" ? "BACKEND LIVE" : "DASHBOARD LIVE";
       renderCurrentView();
     }
 
